@@ -26,6 +26,10 @@ from .project import (
 )
 from .settings import ModellingConfig, Settings
 
+#: What another package may use is what is exported here; no module path
+#: is promised (``docs/adr/0015``).
+PUBLIC_MODULES: frozenset[str] = frozenset()
+
 __all__ = [
     "PROJECT_ENV_VAR",
     "PROJECT_FILE",
