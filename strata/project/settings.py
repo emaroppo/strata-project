@@ -1,7 +1,7 @@
 """Machine-level settings: the catalogs this host reaches, and where it trains.
 
 Everything that belongs to a job lives in the project directory instead.
-This file describes the machine, and is not copied with a project.
+This file describes the machine; a project carries none of it.
 
 What a catalog is, and which one this host uses, is read through
 :mod:`strata.catalog.config`, which the blob server and the modelling host
@@ -57,8 +57,9 @@ class Settings:
         self.catalogs = read_catalogs(data.get("catalog", {}), environ)
         if "modelling" in data:
             self.modelling = ModellingConfig(**data["modelling"])
-        # Credentials belong in the environment rather than in a file that
-        # gets copied around
+        # Credentials belong in the environment rather than in a file: a
+        # config file gets pasted, backed up and copied, and a secret in it
+        # goes everywhere it does
         for name in ("url", "token"):
             value = environ.get(f"STRATA_MODELLING_{name.upper()}")
             if value:

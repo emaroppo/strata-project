@@ -56,8 +56,9 @@ class LabelSetSpec:
     """Which classes this job labels, and what shape an annotation takes.
 
     The label set in the catalog is authoritative once it exists: this
-    section seeds it and ``add_classes`` extends both. ``docs/adr/0014``
-    for why the shape is declared here.
+    section seeds it, and ``add_classes`` extends this section while the
+    tool widens the label set to match. ``docs/adr/0014`` for why the shape
+    is declared here.
     """
 
     task: str = "classification"
