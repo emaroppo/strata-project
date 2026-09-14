@@ -43,14 +43,14 @@ def test_a_section_the_job_does_not_own_is_carried_unread(project):
 
 def test_a_stray_key_at_the_top_is_refused(project):
     toml = project.root / "project.toml"
-    toml.write_text('epochs = 3\n' + toml.read_text())
+    toml.write_text("epochs = 3\n" + toml.read_text())
     with pytest.raises(ProjectError, match="Unknown key"):
         Project.load(project.root)
 
 
 def test_an_unknown_key_inside_a_section_is_refused(project):
     toml = project.root / "project.toml"
-    toml.write_text(toml.read_text().replace("[data]", "[data]\nrooot = \"typo\""))
+    toml.write_text(toml.read_text().replace("[data]", '[data]\nrooot = "typo"'))
     with pytest.raises(ProjectError, match="Unknown key"):
         Project.load(project.root)
 

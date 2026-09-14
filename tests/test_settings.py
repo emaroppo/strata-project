@@ -10,13 +10,17 @@ def _write(tmp_path, body: str):
 
 
 def test_settings_read_the_catalogs_and_the_modelling_host(tmp_path):
-    settings = Settings.load(_write(tmp_path, """
+    path = _write(
+        tmp_path,
+        """
 [catalog]
 root = "catalog"
 
 [modelling]
 url = "http://gpu:8082"
-"""), environ={})
+""",
+    )
+    settings = Settings.load(path, environ={})
     assert settings.catalogs.named("").root == "catalog"
     assert settings.modelling.url == "http://gpu:8082"
     assert settings.modelling.token == ""

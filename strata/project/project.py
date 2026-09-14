@@ -233,10 +233,10 @@ class Project:
                 f"[label_set] choice must be 'single' or 'multiple', got '{spec.choice}'"
             )
         if spec.choice is not None and spec.task != "classification":
-            raise ProjectError("[label_set] choice applies to task = \"classification\" only")
+            raise ProjectError('[label_set] choice applies to task = "classification" only')
         if spec.task != "span" and (spec.multi_label is not None or spec.overlapping is not None):
             raise ProjectError(
-                "[label_set] multi_label and overlapping apply to task = \"span\" only"
+                '[label_set] multi_label and overlapping apply to task = "span" only'
             )
 
     # ------------------------------------------------------------------
@@ -400,6 +400,38 @@ class Project:
         return cls.load(root)
 
 
+_LABEL_SET_NOTE = """
+            multi_label = true   # one region may carry several labels
+            overlapping = true   # two regions may intersect
+"""
+
+_DATA_NOTE = """
+        Where a corpus arrives if it needs converting first: mail, video.
+        See 'strata-catalog preparers' and 'prepare'.
+        source_root = "data/source"
+"""
+
+_CATALOG_NOTE = """
+        A metadata key whose values stay on one side of a split:
+        "video" for frames. Empty, every sample is its own group.
+        group_by = "video"
+
+        A split the corpus arrived with, read off a metadata key each
+        sample carries: which of its values are held out, which are
+        validation. The rest is drawn by ratio.
+        [catalog.split]
+        key = "benchmark_split"
+        holdout = ["test"]
+        val = ["dev"]
+"""
+
+_MODEL_NOTE = """
+        Applied over the above when a round has nothing to continue
+        from. A cold start on an increment's schedule undertrains,
+        and the result then reads as a baseline.
+"""
+
+
 def _scaffold(
     name: str, task: str, classes: list[str], choice: str, sample_type: str
 ) -> tomlkit.TOMLDocument:
@@ -414,10 +446,7 @@ def _scaffold(
             "choice", tomlkit.item(choice).comment('"single" for mutually exclusive classes')
         )
     if task == "span":
-        _note(label_set, """
-            multi_label = true   # one region may carry several labels
-            overlapping = true   # two regions may intersect
-        """)
+        _note(label_set, _LABEL_SET_NOTE)
     doc.add("label_set", label_set)
 
     data = tomlkit.table()
@@ -426,27 +455,11 @@ def _scaffold(
         "type",
         tomlkit.item(sample_type).comment("a registered sample type; see 'strata-catalog types'"),
     )
-    _note(data, """
-        Where a corpus arrives if it needs converting first: mail, video.
-        See 'strata-catalog preparers' and 'prepare'.
-        source_root = "data/source"
-    """)
+    _note(data, _DATA_NOTE)
     doc.add("data", data)
 
     catalog = tomlkit.table()
-    _note(catalog, """
-        A metadata key whose values stay on one side of a split:
-        "video" for frames. Empty, every sample is its own group.
-        group_by = "video"
-
-        A split the corpus arrived with, read off a metadata key each
-        sample carries: which of its values are held out, which are
-        validation. The rest is drawn by ratio.
-        [catalog.split]
-        key = "benchmark_split"
-        holdout = ["test"]
-        val = ["dev"]
-    """)
+    _note(catalog, _CATALOG_NOTE)
     doc.add("catalog", catalog)
 
     model = tomlkit.table()
@@ -458,11 +471,7 @@ def _scaffold(
     params.add("lr", 5e-5)
     model.add("params", params)
     model.add(tomlkit.nl())
-    _note(model, """
-        Applied over the above when a round has nothing to continue
-        from. A cold start on an increment's schedule undertrains,
-        and the result then reads as a baseline.
-    """)
+    _note(model, _MODEL_NOTE)
     fresh = tomlkit.table()
     fresh.add("num_epochs", 8)
     model.add("fresh_params", fresh)
