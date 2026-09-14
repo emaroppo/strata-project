@@ -32,6 +32,7 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 
 import tomlkit
+from tomlkit.items import Table
 
 from strata.labels import AnySchema, BBoxSchema, ClassificationSchema, SpanSchema
 from strata.modelling import Model, ModelError, absolute, resolve
@@ -469,7 +470,7 @@ def _scaffold(
     return doc
 
 
-def _note(table: tomlkit.items.Table, text: str) -> None:
+def _note(table: Table, text: str) -> None:
     """A comment of one or more lines, into ``table`` where it stands."""
     for line in textwrap.dedent(text).strip("\n").splitlines():
         table.add(tomlkit.comment(line) if line else tomlkit.nl())
