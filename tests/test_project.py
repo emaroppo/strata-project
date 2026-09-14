@@ -92,7 +92,7 @@ def test_a_project_without_a_type_says_so_when_asked(project):
     toml = project.root / "project.toml"
     toml.write_text(toml.read_text().replace('type = "image"', 'type = ""'))
     with pytest.raises(ProjectError, match=r"\[data\] type is not set"):
-        Project.load(project.root).sample_type_name
+        _ = Project.load(project.root).sample_type_name
 
 
 def test_a_project_declares_the_split_its_corpus_arrived_with(project):
@@ -116,7 +116,7 @@ def test_a_split_naming_one_set_on_both_sides_is_refused(project):
         )
     )
     with pytest.raises(ProjectError, match="both held out and validation"):
-        Project.load(project.root).catalog.given_split
+        _ = Project.load(project.root).catalog.given_split
 
 
 # ----------------------------------------------------------------------
@@ -243,7 +243,8 @@ def test_add_classes_leaves_the_rest_of_the_file_alone(project):
     before = (project.root / "project.toml").read_text()
     project.add_classes(["bird"])
     after = (project.root / "project.toml").read_text()
-    changed = [(a, b) for a, b in zip(before.splitlines(), after.splitlines()) if a != b]
+    lines = zip(before.splitlines(), after.splitlines(), strict=True)
+    changed = [(a, b) for a, b in lines if a != b]
     assert changed == [('classes = ["cat", "dog"]', 'classes = ["cat", "dog", "bird"]')]
     assert len(before.splitlines()) == len(after.splitlines())
 

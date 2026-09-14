@@ -31,9 +31,9 @@ from .settings import ModellingConfig, Settings
 PUBLIC_MODULES: frozenset[str] = frozenset()
 
 __all__ = [
+    "PROJECTS_DIR",
     "PROJECT_ENV_VAR",
     "PROJECT_FILE",
-    "PROJECTS_DIR",
     "CatalogSpec",
     "DataSpec",
     "LabelSetSpec",
