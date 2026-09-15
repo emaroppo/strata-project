@@ -12,8 +12,9 @@ import re
 import shutil
 
 import pytest
-from strata.project import Project, ProjectError
 from toy_model import TOY_SOURCE
+
+from strata.project import Project, ProjectError
 
 
 def set_ref(project: Project, ref: str, params: str | None = None) -> Project:

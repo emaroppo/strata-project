@@ -3,9 +3,9 @@
 from pathlib import Path
 
 import pytest
-from strata.project import Settings, settings_path
 
 from strata.catalog.config import CatalogConfigError
+from strata.project import Settings, settings_path
 
 
 def _write(tmp_path, body: str):

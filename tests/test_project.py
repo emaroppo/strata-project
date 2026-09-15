@@ -3,9 +3,9 @@
 from pathlib import Path
 
 import pytest
-from strata.project import PROJECT_ENV_VAR, Project, ProjectError, list_projects
 
 from strata.labels import BBoxSchema, ClassificationSchema, SpanSchema
+from strata.project import PROJECT_ENV_VAR, Project, ProjectError, list_projects
 
 # ----------------------------------------------------------------------
 # Loading and validation

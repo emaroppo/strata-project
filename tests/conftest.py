@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+
 from strata.project import PROJECT_ENV_VAR, Project
 
 
