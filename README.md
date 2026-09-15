@@ -29,5 +29,20 @@ num_epochs = 4
 
 A tool keeps what is its own in a section of its own, which this package
 carries without reading: the labeller's `[label_studio]`, for instance.
-Machine-level settings live in `config.toml` beside the checkout and are
-read by `Settings`.
+Machine-level settings are `Settings`, read from the file `$STRATA_CONFIG`
+names, or `config.toml` in the working directory: where the catalogs and
+the modelling host are on this machine, and nothing about any job.
+
+## Decisions
+
+`docs/adr/NNNN`, wherever this package's code says it, is a record in the strata umbrella repository: https://github.com/emaroppo/strata/tree/main/docs/adr.
+
+## Tests
+
+```bash
+.github/sibling-wheels.sh labels common catalog modelling   # the strata packages this one needs, until they are on an index
+uv sync --find-links dist --group dev --extra test
+uv run pytest
+```
+
+Inside the strata workspace: `uv run pytest packages/project` from its root.
