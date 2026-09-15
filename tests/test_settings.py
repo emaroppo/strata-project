@@ -1,6 +1,11 @@
 """Host settings: the catalogs a machine reaches, and where it trains."""
 
-from strata.project import Settings
+from pathlib import Path
+
+import pytest
+from strata.project import Settings, settings_path
+
+from strata.catalog.config import CatalogConfigError
 
 
 def _write(tmp_path, body: str):
@@ -42,3 +47,24 @@ def test_a_section_another_tool_owns_is_left_alone(tmp_path):
 
 def test_a_missing_file_is_the_defaults(tmp_path):
     assert Settings.load(tmp_path / "absent.toml", environ={}).modelling.url == ""
+
+
+def test_an_explicit_path_beats_the_environment(tmp_path):
+    given = _write(tmp_path, "")
+    assert settings_path(given, environ={"STRATA_CONFIG": "/elsewhere.toml"}) == given
+
+
+def test_the_environment_names_the_file(tmp_path):
+    path = _write(tmp_path, '[modelling]\nurl = "http://gpu:8082"\n')
+    environ = {"STRATA_CONFIG": str(path)}
+    assert settings_path(environ=environ) == path
+    assert Settings.load(environ=environ).modelling.url == "http://gpu:8082"
+
+
+def test_the_environment_naming_a_missing_file_is_refused(tmp_path):
+    with pytest.raises(CatalogConfigError, match="STRATA_CONFIG"):
+        settings_path(environ={"STRATA_CONFIG": str(tmp_path / "absent.toml")})
+
+
+def test_nothing_set_is_the_file_beside_the_command():
+    assert settings_path(environ={}) == Path("config.toml")

@@ -24,7 +24,7 @@ from .project import (
     resolve_under,
     section,
 )
-from .settings import ModellingConfig, Settings
+from .settings import ModellingConfig, Settings, settings_path
 
 #: What another package may use is what is exported here; no module path
 #: is promised (``docs/adr/0015``).
@@ -45,4 +45,5 @@ __all__ = [
     "list_projects",
     "resolve_under",
     "section",
+    "settings_path",
 ]
