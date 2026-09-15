@@ -12,12 +12,11 @@ import re
 import shutil
 
 import pytest
+from strata.project import Project, ProjectError
 from toy_model import TOY_SOURCE
 
-from strata.labeller.project import LabellingProject, ProjectError
 
-
-def set_ref(project: LabellingProject, ref: str, params: str | None = None) -> LabellingProject:
+def set_ref(project: Project, ref: str, params: str | None = None) -> Project:
     """Point the project at a different model, and reload it.
 
     Rewrites whatever ref is currently there, so it can be applied twice to
@@ -34,11 +33,11 @@ def set_ref(project: LabellingProject, ref: str, params: str | None = None) -> L
             flags=re.M,
         )
     toml.write_text(text)
-    return LabellingProject.load(project.root)
+    return Project.load(project.root)
 
 
 @pytest.fixture
-def toy_project(project) -> LabellingProject:
+def toy_project(project) -> Project:
     shutil.copyfile(TOY_SOURCE, project.root / "model.py")
     return set_ref(project, "model.py:Toy", 'num_epochs = 7\nnote = "from params"\n')
 
