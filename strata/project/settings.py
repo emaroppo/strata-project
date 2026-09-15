@@ -1,7 +1,8 @@
 """Machine-level settings: the catalogs this host reaches, and where it trains.
 
 Everything that belongs to a job lives in the project directory instead.
-This file describes the machine; a project carries none of it.
+This file describes the machine; a project carries none of it
+(``docs/adr/0016``).
 
 What a catalog is, and which one this host uses, is read through
 :mod:`strata.catalog.config`, which the blob server and the modelling host
@@ -24,15 +25,12 @@ SETTINGS_FILE = "config.toml"
 class ModellingConfig:
     """Where training happens.
 
-    Empty means in this process, which is what a single machine wants and
-    what keeps a checkout runnable. A URL sends rounds to a host with the
-    GPU: it materialises the dataset itself, so nothing but a dataset id
-    travels.
+    Empty means in this process. A URL sends rounds to a host with the
+    GPU, which materialises the dataset itself. See ``docs/adr/0007``.
     """
 
     url: str = ""
-    #: Shared with the host. Out of the file by preference, the same
-    #: argument as every other credential here.
+    #: Shared with the host, and read from the environment. docs/adr/0019
     token: str = ""
 
 
@@ -57,9 +55,7 @@ class Settings:
         self.catalogs = read_catalogs(data.get("catalog", {}), environ)
         if "modelling" in data:
             self.modelling = ModellingConfig(**data["modelling"])
-        # Credentials belong in the environment rather than in a file: a
-        # config file gets pasted, backed up and copied, and a secret in it
-        # goes everywhere it does
+        # Credentials come from the environment. docs/adr/0019
         for name in ("url", "token"):
             value = environ.get(f"STRATA_MODELLING_{name.upper()}")
             if value:

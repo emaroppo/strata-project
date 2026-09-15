@@ -2,11 +2,9 @@
 
 A project is a directory whose ``project.toml`` names a catalog, the
 collections it draws samples from, the label set it labels them under, and
-the model it trains. The samples and the annotations are not here; they
-live in the catalog, which outlives any project. Neither is the tool:
-machine-level settings stay in ``config.toml``, which describes the machine
-and not the job, and what a labelling tool needs of its own goes in a
-section of its own that this package carries without reading.
+the model it trains. The samples and the annotations live in the catalog,
+machine-level settings in ``config.toml``, and what a tool needs of its own
+in a section this package carries without reading.
 
     projects/my-project/
     ├── project.toml            # this file's schema: catalog, label set, model
@@ -18,10 +16,8 @@ section of its own that this package carries without reading.
     └── experiments/            # the ledger of experiment files run over this project
 
 Handing someone the directory hands them the job's definition and its
-record, not its data: a run names the dataset version and the model
-version it came from, and those resolve in the catalog. A project is
-addressed by name under ``projects/`` or by path, and an experiment file
-references one the same way. Why the job is its own package:
+record, not its data. A project is addressed by name under ``projects/`` or
+by path, and an experiment file references one the same way. See
 ``docs/adr/0016``.
 """
 
@@ -65,8 +61,8 @@ class LabelSetSpec:
     classes: list[str] = field(default_factory=list)
     #: Classification only: "single" for mutually exclusive classes.
     choice: str | None = None
-    #: Span only. None means not declared, so setting either on a task
-    #: with no such notion is refused by name rather than ignored.
+    #: Span only. None means not declared, so setting either on another
+    #: task is refused by name. docs/adr/0016
     multi_label: bool | None = None
     overlapping: bool | None = None
 
@@ -92,10 +88,7 @@ class ModelSpec:
     # falls back to an installed package
     ref: str = "multilabel"
     params: dict = field(default_factory=dict)
-    # Merged over params when a round starts cold. A run with nothing to
-    # inherit has to learn from scratch, where a warm round is an increment
-    # onto something already trained, so the epoch count that suits one
-    # badly undertrains the other.
+    # Merged over params when a round starts cold. docs/adr/0025
     fresh_params: dict = field(default_factory=dict)
 
     def params_for(self, fresh: bool) -> dict:
@@ -106,16 +99,12 @@ class ModelSpec:
 class CatalogSpec:
     """Which catalog, and which label set inside it, this job uses.
 
-    Where each catalog *is* lives in config.toml, which describes the
-    machine. Which one this job draws from is part of what the job is, so
-    it travels with the project.
+    Where each catalog *is* lives in config.toml; which one this job draws
+    from travels with the project. See ``docs/adr/0020``.
     """
 
     #: Which catalog on this host, by the name it has in config.toml. Empty
-    #: means the host's default. Naming it is a statement about the data,
-    #: not about a machine: a project moved to another host expects a
-    #: catalog of the same name there, and gets an error rather than
-    #: someone else's corpus if there is none.
+    #: means the host's default. docs/adr/0020
     name: str = ""
     #: Defaults to the project's own name, which is the label set ingest
     #: creates.
@@ -128,8 +117,7 @@ class CatalogSpec:
     #: one declares that data out of scope, training included.
     collections: list[str] = field(default_factory=list)
     #: A metadata key whose values stay on one side of a split: ``video``
-    #: for frames, so consecutive near-duplicates are never split across
-    #: train and validation. Empty means every sample is its own group.
+    #: for frames. Empty means every sample is its own group. docs/adr/0023
     group_by: str = ""
     #: A split the corpus arrived with, read off a metadata key: ``key``,
     #: and which of its values are ``holdout`` and which ``val``. Empty
@@ -152,9 +140,8 @@ class CatalogSpec:
 @dataclass
 class DataSpec:
     root: str = "data/raw"
-    #: Where the corpus arrives, before anything has converted it. Separate
-    #: from ``root`` because the two hold different things: one is the
-    #: corpus as it came, the other is the corpus as the catalog stores it.
+    #: Where the corpus arrives, before anything has converted it.
+    #: docs/adr/0010
     source_root: str = "data/source"
     #: Which conversion to run over it. Empty resolves by what the files
     #: are and what this project ingests, and refuses an ambiguity.
@@ -181,8 +168,8 @@ class Project:
     model: ModelSpec = field(default_factory=ModelSpec)
     data: DataSpec = field(default_factory=DataSpec)
     catalog: CatalogSpec = field(default_factory=CatalogSpec)
-    #: Sections the job does not own, by name, as read. A tool keeps what
-    #: is its own here and reads it itself; the job carries it unread.
+    #: Sections the job does not own, by name, as read; the job carries
+    #: them unread. docs/adr/0016
     extensions: dict[str, dict] = field(default_factory=dict)
 
     SECTIONS = ("label_set", "model", "data", "catalog")
@@ -310,10 +297,8 @@ class Project:
     def model_ref(self, ref: str | None = None) -> str:
         """A model reference anchored at the project, so it resolves from anywhere.
 
-        A ``model.py`` belongs to the job rather than to the dataset it is
-        trained on, and a run records the reference to read back later, when
-        the directory it was relative to is long gone. ``ref`` is the
-        project's own unless an experiment names another.
+        ``ref`` is the project's own unless an experiment names another. See
+        ``docs/adr/0016``.
         """
         return absolute(self.model.ref if ref is None else ref, self.root)
 
@@ -338,9 +323,8 @@ class Project:
     def add_classes(self, names: list[str], known: list[str] | None = None) -> list[str]:
         """Append classes to project.toml and return the new full list.
 
-        Classes are append-only: a checkpoint maps output neurons to this
-        list by position, so reordering would silently invalidate every
-        checkpoint. When the list is empty the classes in use are written
+        Classes are append-only (``docs/adr/0005``). When the list is empty
+        the classes in use are written
         out first (``known``), turning an inferred order into a pinned one.
         """
         classes = list(self.label_set.classes) or sorted(known or [])
@@ -509,8 +493,8 @@ def _resolve_named(path: Path) -> Path:
     named = Path(PROJECTS_DIR) / path
     if (named / PROJECT_FILE).exists():
         return named.resolve()
-    # Absolute so paths handed to models and workers do not depend on cwd;
-    # load() raises the missing-project.toml error from here
+    # Absolute, so nothing handed on depends on cwd (docs/adr/0016); load()
+    # raises the missing-project.toml error from here
     return path.resolve()
 
 
