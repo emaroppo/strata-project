@@ -5,7 +5,7 @@ both (``docs/adr/0016``). Everything here is about the job; how a tool
 presents it is that tool's own, kept in a section this package carries
 without reading.
 
-**May import:** ``labels``, ``catalog`` and ``modelling``.
+**May import:** ``contracts``, ``catalog`` and ``modelling``.
 **May not import:** ``strata.labeller``, ``strata.experiment``, or Label
 Studio.
 """

@@ -30,7 +30,7 @@ from pathlib import Path
 import tomlkit
 from tomlkit.items import Table
 
-from strata.labels import AnySchema, BBoxSchema, ClassificationSchema, SpanSchema
+from strata.contracts import AnySchema, BBoxSchema, ClassificationSchema, SpanSchema
 from strata.modelling import Model, ModelError, absolute, resolve
 
 PROJECT_FILE = "project.toml"
@@ -39,7 +39,7 @@ PROJECT_ENV_VAR = "STRATA_PROJECT"
 PROJECTS_DIR = "projects"
 
 #: What kind of annotation a job collects. The catalog's schema for each is
-#: in ``strata.labels``; the media it is collected over is the sample type's.
+#: in ``strata.contracts``; the media it is collected over is the sample type's.
 TASKS = ("classification", "bbox", "span")
 
 

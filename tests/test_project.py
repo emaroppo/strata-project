@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from strata.labels import BBoxSchema, ClassificationSchema, SpanSchema
+from strata.contracts import BBoxSchema, ClassificationSchema, SpanSchema
 from strata.project import PROJECT_ENV_VAR, Project, ProjectError, list_projects
 
 # ----------------------------------------------------------------------

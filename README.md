@@ -40,7 +40,7 @@ the modelling host are on this machine, and nothing about any job.
 ## Tests
 
 ```bash
-.github/sibling-wheels.sh labels common catalog modelling   # the strata packages this one needs, until they are on an index
+.github/sibling-wheels.sh contracts common catalog modelling   # the strata packages this one needs, until they are on an index
 uv sync --find-links dist --group dev --extra test
 uv run pytest
 ```

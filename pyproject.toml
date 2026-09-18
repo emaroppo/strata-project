@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "tomlkit>=0.13",
-    "strata-labels>=0.1,<0.2",
+    "strata-contracts>=0.1,<0.2",
     "strata-catalog>=0.1,<0.2",
     "strata-modelling>=0.1,<0.2",
 ]
