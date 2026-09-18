@@ -5,6 +5,19 @@ catalog, the collections it draws samples from, the label set it labels
 them under, and the model it trains. The labeller runs the job and
 experiments vary it; both read the same file through this package.
 
+Not on PyPI: it installs from its repository at a release tag. uv takes a
+git source only for a package named directly, so the strata packages
+beneath it are named beside it.
+
+```bash
+g=git+https://github.com/emaroppo
+uv add "strata-project @ $g/strata-project@v0.1.0"     \
+       "strata-modelling @ $g/strata-modelling@v0.1.0" \
+       "strata-catalog @ $g/strata-catalog@v0.1.0"     \
+       "strata-contracts @ $g/strata-contracts@v0.1.0" \
+       "strata-common @ $g/strata-common@v0.1.0"
+```
+
 ```toml
 name = "my-project"
 
@@ -40,7 +53,7 @@ the modelling host are on this machine, and nothing about any job.
 ## Tests
 
 ```bash
-.github/sibling-wheels.sh contracts common catalog modelling   # the strata packages this one needs, until they are on an index
+.github/sibling-wheels.sh contracts common catalog modelling   # the strata packages this one needs, from their repositories
 uv sync --find-links dist --group dev --extra test
 uv run pytest
 ```
