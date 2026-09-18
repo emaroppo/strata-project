@@ -282,7 +282,7 @@ class Project:
 
     def sample_type(self):
         """The type itself, resolved from what is installed."""
-        from strata.catalog.types.sample_types import SampleTypeError, resolve
+        from strata.contracts.sample_types import SampleTypeError, resolve
 
         name = self.sample_type_name
         try:
@@ -391,8 +391,11 @@ _LABEL_SET_NOTE = """
 """
 
 _DATA_NOTE = """
-        Where a corpus arrives if it needs converting first: mail, video.
-        See 'strata-catalog preparers' and 'prepare'.
+        What ingest takes is a prepared corpus in root: files and the
+        prepared.json naming them. A corpus that needs converting first,
+        mail or video, arrives in source_root; one already in shape is
+        indexed where it is (prepare --preparer image-folder --from data/raw).
+        See 'strata-prepare preparers' and 'prepare'.
         source_root = "data/source"
 """
 
