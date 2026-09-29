@@ -22,7 +22,7 @@ uv add "strata-project @ $g/strata-project@v0.1.0"     \
 name = "my-project"
 
 [label_set]
-task = "classification"              # classification, bbox or span
+label_type = "classification"        # classification, bbox or span
 classes = ["cat", "dog"]
 choice = "multiple"                  # "single" for mutually exclusive classes
 

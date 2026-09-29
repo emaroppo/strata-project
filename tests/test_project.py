@@ -15,7 +15,7 @@ from strata.project import PROJECT_ENV_VAR, Project, ProjectError, list_projects
 def test_create_then_load_round_trip(project):
     reloaded = Project.load(project.root)
     assert reloaded.name == project.name
-    assert reloaded.label_set.task == "classification"
+    assert reloaded.label_set.label_type == "classification"
     assert reloaded.label_set.classes == ["cat", "dog"]
     assert reloaded.data.type == "image"
 
@@ -62,22 +62,36 @@ def test_choice_must_be_single_or_multiple(project):
         Project.load(project.root)
 
 
-def test_an_unknown_task_fails_at_load(project):
+def test_an_unknown_label_type_fails_at_load(project):
     toml = project.root / "project.toml"
-    toml.write_text(toml.read_text().replace('task = "classification"', 'task = "segmentation"'))
-    with pytest.raises(ProjectError, match="task must be one of"):
+    toml.write_text(
+        toml.read_text().replace('label_type = "classification"', 'label_type = "segmentation"')
+    )
+    with pytest.raises(ProjectError, match="label_type must be one of"):
         Project.load(project.root)
 
 
-def test_span_parameters_are_refused_on_another_task(project):
+def test_the_old_task_key_is_refused_by_its_new_name(project):
+    """`task` became `label_type`; the refusal says so and gives the line (docs/adr/0041)."""
+    toml = project.root / "project.toml"
+    toml.write_text(
+        toml.read_text().replace('label_type = "classification"', 'task = "classification"')
+    )
+    with pytest.raises(
+        ProjectError, match=r'task is now label_type.*label_type = "classification"'
+    ):
+        Project.load(project.root)
+
+
+def test_span_parameters_are_refused_on_another_label_type(project):
     toml = project.root / "project.toml"
     toml.write_text(toml.read_text().replace("[label_set]", "[label_set]\nmulti_label = true"))
     with pytest.raises(ProjectError, match="span"):
         Project.load(project.root)
 
 
-def test_choice_is_refused_on_another_task(make_project):
-    project = make_project("spans", task="span", sample_type="text")
+def test_choice_is_refused_on_another_label_type(make_project):
+    project = make_project("spans", label_type="span", sample_type="text")
     toml = project.root / "project.toml"
     toml.write_text(toml.read_text().replace("[label_set]", '[label_set]\nchoice = "single"'))
     with pytest.raises(ProjectError, match="classification"):
@@ -132,7 +146,7 @@ def test_a_classification_job_seeds_a_classification_schema(make_project):
 
 
 def test_a_span_job_seeds_a_span_schema(make_project):
-    project = make_project("spans", task="span", sample_type="text", classes=["PER"])
+    project = make_project("spans", label_type="span", sample_type="text", classes=["PER"])
     toml = project.root / "project.toml"
     toml.write_text(toml.read_text().replace("[label_set]", "[label_set]\nmulti_label = true"))
     assert Project.load(project.root).label_set.schema == SpanSchema(
@@ -141,7 +155,7 @@ def test_a_span_job_seeds_a_span_schema(make_project):
 
 
 def test_a_bbox_job_seeds_a_bbox_schema(make_project):
-    project = make_project("boxes", task="bbox")
+    project = make_project("boxes", label_type="bbox")
     assert project.label_set.schema == BBoxSchema(classes=["cat", "dog"])
 
 

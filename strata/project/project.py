@@ -38,9 +38,11 @@ PROJECT_ENV_VAR = "STRATA_PROJECT"
 # Projects live side by side here, addressable by name: -p cats
 PROJECTS_DIR = "projects"
 
-#: What kind of annotation a job collects. The catalog's schema for each is
-#: in ``strata.contracts``; the media it is collected over is the sample type's.
-TASKS = ("classification", "bbox", "span")
+#: What an annotation looks like. The catalog's schema for each is in
+#: ``strata.contracts``; the media it is collected over is the sample type's.
+#: Not what it is for: that is a task, and several may read one label type.
+#: See ``docs/adr/0041``.
+LABEL_TYPES = ("classification", "bbox", "span")
 
 
 class ProjectError(Exception):
@@ -57,23 +59,23 @@ class LabelSetSpec:
     is declared here.
     """
 
-    task: str = "classification"
+    label_type: str = "classification"
     classes: list[str] = field(default_factory=list)
     #: Classification only: "single" for mutually exclusive classes.
     choice: str | None = None
     #: Span only. None means not declared, so setting either on another
-    #: task is refused by name. docs/adr/0016
+    #: label type is refused by name. docs/adr/0016
     multi_label: bool | None = None
     overlapping: bool | None = None
 
     @property
     def schema(self) -> AnySchema:
         """This label set as the catalog stores it."""
-        if self.task == "classification":
+        if self.label_type == "classification":
             return ClassificationSchema(
                 classes=list(self.classes), multiple=self.choice != "single"
             )
-        if self.task == "span":
+        if self.label_type == "span":
             return SpanSchema(
                 classes=list(self.classes),
                 multi_label=bool(self.multi_label),
@@ -201,7 +203,7 @@ class Project:
         project = cls(
             root=root,
             name=data.get("name", root.name),
-            label_set=section(LabelSetSpec, data.get("label_set", {}), "label_set"),
+            label_set=section(LabelSetSpec, _label_set(data.get("label_set", {})), "label_set"),
             model=section(ModelSpec, data.get("model", {}), "model"),
             data=section(DataSpec, data.get("data", {}), "data"),
             catalog=section(CatalogSpec, data.get("catalog", {}), "catalog"),
@@ -212,19 +214,22 @@ class Project:
 
     def _validate(self) -> None:
         spec = self.label_set
-        if spec.task not in TASKS:
+        if spec.label_type not in LABEL_TYPES:
             raise ProjectError(
-                f"[label_set] task must be one of {', '.join(TASKS)}; got '{spec.task}'"
+                f"[label_set] label_type must be one of {', '.join(LABEL_TYPES)}; "
+                f"got '{spec.label_type}'"
             )
         if spec.choice not in {None, "single", "multiple"}:
             raise ProjectError(
                 f"[label_set] choice must be 'single' or 'multiple', got '{spec.choice}'"
             )
-        if spec.choice is not None and spec.task != "classification":
-            raise ProjectError('[label_set] choice applies to task = "classification" only')
-        if spec.task != "span" and (spec.multi_label is not None or spec.overlapping is not None):
+        if spec.choice is not None and spec.label_type != "classification":
+            raise ProjectError('[label_set] choice applies to label_type = "classification" only')
+        if spec.label_type != "span" and (
+            spec.multi_label is not None or spec.overlapping is not None
+        ):
             raise ProjectError(
-                '[label_set] multi_label and overlapping apply to task = "span" only'
+                '[label_set] multi_label and overlapping apply to label_type = "span" only'
             )
 
     # ------------------------------------------------------------------
@@ -369,18 +374,20 @@ class Project:
         root: Path,
         name: str | None = None,
         classes: list[str] | None = None,
-        task: str = "classification",
+        label_type: str = "classification",
         choice: str = "multiple",
         sample_type: str = "image",
     ):
         """Write a commented project.toml and return the project, loaded."""
         if (root / PROJECT_FILE).exists():
             raise ProjectError(f"{root / PROJECT_FILE} already exists")
-        if task not in TASKS:
-            raise ProjectError(f"task must be one of {', '.join(TASKS)}; got '{task}'")
+        if label_type not in LABEL_TYPES:
+            raise ProjectError(
+                f"label_type must be one of {', '.join(LABEL_TYPES)}; got '{label_type}'"
+            )
         name = name or root.resolve().name
         (root / "data" / "raw").mkdir(parents=True, exist_ok=True)
-        document = _scaffold(name, task, classes or [], choice, sample_type)
+        document = _scaffold(name, label_type, classes or [], choice, sample_type)
         (root / PROJECT_FILE).write_text(tomlkit.dumps(document))
         return cls.load(root)
 
@@ -421,19 +428,19 @@ _MODEL_NOTE = """
 
 
 def _scaffold(
-    name: str, task: str, classes: list[str], choice: str, sample_type: str
+    name: str, label_type: str, classes: list[str], choice: str, sample_type: str
 ) -> tomlkit.TOMLDocument:
     doc = tomlkit.document()
     doc.add("name", name)
 
     label_set = tomlkit.table()
-    label_set.add("task", tomlkit.item(task).comment(", ".join(TASKS)))
+    label_set.add("label_type", tomlkit.item(label_type).comment(", ".join(LABEL_TYPES)))
     label_set.add("classes", classes)
-    if task == "classification":
+    if label_type == "classification":
         label_set.add(
             "choice", tomlkit.item(choice).comment('"single" for mutually exclusive classes')
         )
-    if task == "span":
+    if label_type == "span":
         _note(label_set, _LABEL_SET_NOTE)
     doc.add("label_set", label_set)
 
@@ -523,6 +530,21 @@ def _resolve_root(path: Path | None) -> Path:
             f"or set ${PROJECT_ENV_VAR}."
         )
     return Path(".").resolve()
+
+
+def _label_set(data: dict) -> dict:
+    """The [label_set] table, refusing the key it had before it was renamed.
+
+    Named rather than left to the unknown-key refusal, which would list the
+    known keys without saying ``task`` is one of them under a new name.
+    See ``docs/adr/0041``.
+    """
+    if "task" in data:
+        raise ProjectError(
+            "[label_set] task is now label_type: what an annotation looks like, "
+            f'classification, bbox or span. Rename it: label_type = "{data["task"]}".'
+        )
+    return data
 
 
 def section(spec: type, data: dict, name: str):
