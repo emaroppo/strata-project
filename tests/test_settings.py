@@ -135,3 +135,58 @@ def test_a_url_from_the_environment_with_several_hosts_is_refused(tmp_path):
 def test_an_unknown_modelling_key_is_refused(tmp_path):
     with pytest.raises(CatalogConfigError, match=r"modelling\.gx10"):
         Settings.load(_write(tmp_path, '[modelling.gx10]\nurl = "u"\nport = 1\n'), environ={})
+
+
+CATALOG_DEFAULTS = """
+[catalog]
+default = "main"
+
+[catalog.main]
+root = "main"
+
+[catalog.local]
+root = "local"
+
+[modelling]
+default = "here"
+
+[modelling.here]
+
+[modelling.gx10]
+url = "http://gx10:8082"
+default_for = ["main"]
+"""
+
+
+def test_a_catalogs_projects_train_on_the_host_that_claims_it(tmp_path):
+    settings = Settings.load(_write(tmp_path, CATALOG_DEFAULTS), environ={})
+    assert settings.modelling_for("main").name == "gx10"
+    # The default catalog is main, so a project naming none goes there too
+    assert settings.modelling_for("").name == "gx10"
+    assert settings.modelling_for("local").name == "here"
+    assert settings.modelling_for("local").url == ""
+
+
+def test_a_named_host_beats_the_catalogs_default(tmp_path):
+    settings = Settings.load(_write(tmp_path, CATALOG_DEFAULTS), environ={})
+    assert settings.modelling_for("main", "here").name == "here"
+
+
+def test_default_for_naming_an_unknown_catalog_is_refused(tmp_path):
+    body = CATALOG_DEFAULTS.replace('default_for = ["main"]', 'default_for = ["mian"]')
+    with pytest.raises(CatalogConfigError, match="mian"):
+        Settings.load(_write(tmp_path, body), environ={})
+
+
+def test_two_hosts_claiming_one_catalog_is_refused(tmp_path):
+    body = CATALOG_DEFAULTS.replace(
+        "[modelling.here]\n", '[modelling.here]\ndefault_for = ["main"]\n'
+    )
+    with pytest.raises(CatalogConfigError, match="one host is its default"):
+        Settings.load(_write(tmp_path, body), environ={})
+
+
+def test_default_for_in_the_flat_section_is_refused(tmp_path):
+    body = '[modelling]\nurl = "http://gpu:8082"\ndefault_for = ["default"]\n'
+    with pytest.raises(CatalogConfigError, match="belongs in that host's"):
+        Settings.load(_write(tmp_path, body), environ={})

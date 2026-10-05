@@ -75,6 +75,9 @@ class ModellingConfig:
 
 #: What ``[modelling]`` and each ``[modelling.<name>]`` may say.
 _MODELLING_KEYS = frozenset({"url", "token"})
+#: Only in a ``[modelling.<name>]``: the catalogs whose projects it trains
+#: when nothing names a host. docs/adr/0043
+_DEFAULT_FOR = "default_for"
 
 
 @dataclass
@@ -94,6 +97,9 @@ class ModellingHosts:
     #: Which name :attr:`default` resolved to. Empty for a flat ``[modelling]``,
     #: or when several are described and none is marked — see :meth:`named`.
     default_name: str = ""
+    #: Catalog name to the host its projects train on when nothing names
+    #: one, from each table's ``default_for``.
+    by_catalog: dict[str, str] = field(default_factory=dict)
 
     def names(self) -> list[str]:
         return sorted(self.by_name)
@@ -145,6 +151,30 @@ def read_modelling(section: dict, environ: Mapping[str, str]) -> ModellingHosts:
     scalars = {k: v for k, v in section.items() if not isinstance(v, dict)}
     tables = {k: v for k, v in section.items() if isinstance(v, dict)}
     chosen = scalars.pop("default", "")
+    if _DEFAULT_FOR in scalars:
+        raise ModellingConfigError(
+            f"[modelling] {_DEFAULT_FOR} says which host a catalog's projects "
+            f"train on, so it belongs in that host's [modelling.<name>] table."
+        )
+    claims: dict[str, str] = {}
+    for name, table in tables.items():
+        catalogs = table.get(_DEFAULT_FOR, [])
+        if not isinstance(catalogs, list) or not all(isinstance(c, str) for c in catalogs):
+            raise ModellingConfigError(
+                f'[modelling.{name}] {_DEFAULT_FOR} is a list of catalog names: ["main"].'
+            )
+        for catalog in catalogs:
+            if catalog in claims:
+                raise ModellingConfigError(
+                    f"Catalog {catalog!r} is in the {_DEFAULT_FOR} of both "
+                    f"[modelling.{claims[catalog]}] and [modelling.{name}]; one "
+                    f"host is its default."
+                )
+            claims[catalog] = name
+    tables = {
+        name: {k: v for k, v in table.items() if k != _DEFAULT_FOR}
+        for name, table in tables.items()
+    }
     for where, keys in [("modelling", scalars)] + [
         (f"modelling.{n}", t) for n, t in tables.items()
     ]:
@@ -187,13 +217,15 @@ def read_modelling(section: dict, environ: Mapping[str, str]) -> ModellingHosts:
                 f"[modelling] default = {chosen!r} names no host. "
                 f"Configured: {', '.join(sorted(by_name))}."
             )
-        return ModellingHosts(default=by_name[chosen], by_name=by_name, default_name=chosen)
+        return ModellingHosts(
+            default=by_name[chosen], by_name=by_name, default_name=chosen, by_catalog=claims
+        )
     if len(by_name) == 1:
         [(name, only)] = by_name.items()
-        return ModellingHosts(default=only, by_name=by_name, default_name=name)
-    # Unresolved, and not an error yet: a project or --host naming one
-    # settles it
-    return ModellingHosts(by_name=by_name)
+        return ModellingHosts(default=only, by_name=by_name, default_name=name, by_catalog=claims)
+    # Unresolved, and not an error yet: a project, a catalog's default or
+    # --host naming one settles it
+    return ModellingHosts(by_name=by_name, by_catalog=claims)
 
 
 @dataclass
@@ -218,3 +250,24 @@ class Settings:
         """Take what this class owns from the file; a subclass adds its own."""
         self.catalogs = read_catalogs(data.get("catalog", {}), environ)
         self.modelling = read_modelling(data.get("modelling", {}), environ)
+        known = self.catalogs.names()
+        for catalog, host in sorted(self.modelling.by_catalog.items()):
+            if catalog not in known:
+                raise ModellingConfigError(
+                    f"[modelling.{host}] {_DEFAULT_FOR} names catalog {catalog!r}, "
+                    f"which this machine does not describe. Configured: {', '.join(known)}."
+                )
+
+    def modelling_for(self, catalog: str = "", host: str = "") -> ModellingConfig:
+        """The host a project on ``catalog`` trains on.
+
+        ``host`` when given (``--host``, else the project's ``[model]
+        host``); otherwise the host whose ``default_for`` lists the catalog,
+        since only a host that reads a catalog can train from it; otherwise
+        the machine's default. An empty ``catalog`` is the machine's default
+        catalog. See ``docs/adr/0043``.
+        """
+        if host:
+            return self.modelling.named(host)
+        claimed = self.modelling.by_catalog.get(catalog or self.catalogs.default_name)
+        return self.modelling.named(claimed or "")
