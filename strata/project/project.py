@@ -92,6 +92,9 @@ class ModelSpec:
     params: dict = field(default_factory=dict)
     # Merged over params when a round starts cold. docs/adr/0025
     fresh_params: dict = field(default_factory=dict)
+    #: Which modelling host trains this job and keeps its runs, by the name
+    #: it has in config.toml. Empty means the machine's default. docs/adr/0043
+    host: str = ""
 
     def params_for(self, fresh: bool) -> dict:
         return {**self.params, **self.fresh_params} if fresh else dict(self.params)

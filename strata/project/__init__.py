@@ -24,7 +24,13 @@ from .project import (
     resolve_under,
     section,
 )
-from .settings import ModellingConfig, Settings, settings_path
+from .settings import (
+    ModellingConfig,
+    ModellingConfigError,
+    ModellingHosts,
+    Settings,
+    settings_path,
+)
 
 #: What another package may use is what is exported here; no module path
 #: is promised (``docs/adr/0015``).
@@ -39,6 +45,8 @@ __all__ = [
     "LabelSetSpec",
     "ModelSpec",
     "ModellingConfig",
+    "ModellingConfigError",
+    "ModellingHosts",
     "Project",
     "ProjectError",
     "Settings",
