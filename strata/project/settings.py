@@ -17,30 +17,16 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from strata.catalog.config import CONFIG_ENV, CatalogConfigError, Catalogs, read_catalogs
-
-SETTINGS_FILE = "config.toml"
-
-
-def settings_path(given: Path | None = None, environ: Mapping[str, str] | None = None) -> Path:
-    """The host file a command reads: what it was given, else what ``$STRATA_CONFIG``
-    names, else ``./config.toml``.
-
-    The variable is the one a service reads, so a host states its file
-    once and a project directory needs no copy. A variable naming a file
-    that does not exist is refused rather than defaulted, as it is for a
-    service. See ``docs/adr/0019``.
-    """
-    if given is not None:
-        return given
-    environ = os.environ if environ is None else environ
-    value = environ.get(CONFIG_ENV, "")
-    if not value:
-        return Path(SETTINGS_FILE)
-    path = Path(value)
-    if not path.exists():
-        raise CatalogConfigError(f"${CONFIG_ENV} names {path}, which does not exist.")
-    return path
+# Which file a command reads is settled in the catalog, so that every
+# command line, strata-catalog included, resolves it the same way. Both
+# names stay importable from here. docs/adr/0019
+from strata.catalog.config import (
+    SETTINGS_FILE,  # noqa: F401
+    CatalogConfigError,
+    Catalogs,
+    read_catalogs,
+    settings_path,
+)
 
 
 class ModellingConfigError(CatalogConfigError):
