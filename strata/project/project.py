@@ -1,24 +1,8 @@
-"""The project construct: the durable job, as a file that names what it is made of.
+"""The project construct: a directory whose ``project.toml`` names the job.
 
-A project is a directory whose ``project.toml`` names a catalog, the
-collections it draws samples from, the label set it labels them under, and
-the model it trains. The samples and the annotations live in the catalog,
-machine-level settings in ``config.toml``, and what a tool needs of its own
-in a section this package carries without reading.
-
-    projects/my-project/
-    ├── project.toml            # this file's schema: catalog, label set, model
-    ├── model.py                # optional: a model carried by this project
-    ├── data/raw/…              # a corpus before ingest; [data] root, may be elsewhere
-    ├── data/source/…           # a corpus before conversion, when it needs one
-    ├── datasets/               # materialised dataset versions, files by checksum
-    ├── runs/                   # the run store: runs.db, checkpoints/
-    └── experiments/            # the ledger of experiment files run over this project
-
-Handing someone the directory hands them the job's definition and its
-record, not its data. A project is addressed by name under ``projects/`` or
-by path, and an experiment file references one the same way. See
-``docs/adr/0016``.
+It names a catalog, the collections it draws from, the label set it labels
+under and the model it trains; a tool's own section is carried unread. A
+project is addressed by name under ``projects/`` or by path. See ``docs/adr/0016``.
 """
 
 import os
@@ -30,18 +14,18 @@ from pathlib import Path
 import tomlkit
 from tomlkit.items import Table
 
+from strata.catalog import GivenSplit
+from strata.catalog.versions.features import FeatureSpec
 from strata.contracts import AnySchema, BBoxSchema, ClassificationSchema, SpanSchema
+from strata.contracts.sample_types import SampleTypeError
+from strata.contracts.sample_types import resolve as resolve_sample_type
 from strata.modelling import Model, ModelError, absolute, resolve
 
 PROJECT_FILE = "project.toml"
 PROJECT_ENV_VAR = "STRATA_PROJECT"
-# Projects live side by side here, addressable by name: -p cats
 PROJECTS_DIR = "projects"
 
-#: What an annotation looks like. The catalog's schema for each is in
-#: ``strata.contracts``; the media it is collected over is the sample type's.
-#: Not what it is for: that is a task, and several may read one label type.
-#: See ``docs/adr/0041``.
+#: What an annotation looks like, not what it is for. docs/adr/0041
 LABEL_TYPES = ("classification", "bbox", "span")
 
 
@@ -53,18 +37,15 @@ class ProjectError(Exception):
 class LabelSetSpec:
     """Which classes this job labels, and what shape an annotation takes.
 
-    The label set in the catalog is authoritative once it exists: this
-    section seeds it, and ``add_classes`` extends this section while the
-    tool widens the label set to match. ``docs/adr/0014`` for why the shape
-    is declared here.
+    Seeds the catalog's label set, which is authoritative once it exists.
+    See ``docs/adr/0014``.
     """
 
     label_type: str = "classification"
     classes: list[str] = field(default_factory=list)
     #: Classification only: "single" for mutually exclusive classes.
     choice: str | None = None
-    #: Span only. None means not declared, so setting either on another
-    #: label type is refused by name. docs/adr/0016
+    #: Span only. None means not declared; set on another label type, refused. docs/adr/0014
     multi_label: bool | None = None
     overlapping: bool | None = None
 
@@ -86,47 +67,33 @@ class LabelSetSpec:
 
 @dataclass
 class ModelSpec:
-    # "<file>.py:Class" resolves inside the project; "pkg.module:Class"
-    # falls back to an installed package
+    # A registered name, "file.py:Class" in the project, or an installed "pkg.module:Class"
     ref: str = "multilabel"
     params: dict = field(default_factory=dict)
     # Merged over params when a round starts cold. docs/adr/0025
     fresh_params: dict = field(default_factory=dict)
-    #: Which modelling host trains this job and keeps its runs, by the name
-    #: it has in config.toml. Empty means the machine's default. docs/adr/0043
+    #: Which host trains this job, by its config.toml name; empty is the default. docs/adr/0043
     host: str = ""
-
-    def params_for(self, fresh: bool) -> dict:
-        return {**self.params, **self.fresh_params} if fresh else dict(self.params)
 
 
 @dataclass
 class CatalogSpec:
     """Which catalog, and which label set inside it, this job uses.
 
-    Where each catalog *is* lives in config.toml; which one this job draws
-    from travels with the project. See ``docs/adr/0020``.
+    See ``docs/adr/0020``.
     """
 
-    #: Which catalog on this host, by the name it has in config.toml. Empty
-    #: means the host's default. docs/adr/0020
+    #: Which catalog on this host, by its config.toml name; empty is the default. docs/adr/0020
     name: str = ""
-    #: Defaults to the project's own name, which is the label set ingest
-    #: creates.
+    #: Defaults to the project's name, the label set ingest creates.
     label_set: str = ""
     #: The dataset name versions accumulate under; defaults to the label set.
     dataset: str = ""
-    #: Which collections in the catalog this job draws from, as paths:
-    #: ["sat_images"] takes everything under it, ["sat_images/2024"] one
-    #: batch. Defaults to a collection named after the label set. Dropping
-    #: one declares that data out of scope, training included.
+    #: Collections drawn from, as paths; default one named after the label set. docs/adr/0022
     collections: list[str] = field(default_factory=list)
-    #: A metadata key whose values stay on one side of a split: ``video``
-    #: for frames. Empty means every sample is its own group. docs/adr/0023
+    #: Metadata key whose values stay on one side of a split; empty, none. docs/adr/0023
     group_by: str = ""
-    #: A split the corpus arrived with, read off a metadata key: ``key``,
-    #: and which of its values are ``holdout`` and which ``val``. Empty
-    #: means every side is drawn by ratio.
+    #: A split the corpus arrived with, off a metadata key; empty draws by ratio. docs/adr/0024
     split: dict = field(default_factory=dict)
 
     @property
@@ -134,8 +101,6 @@ class CatalogSpec:
         """The split as the catalog reads it, or None when none is declared."""
         if not self.split:
             return None
-        from strata.catalog import GivenSplit
-
         try:
             return GivenSplit(**self.split)
         except (TypeError, ValueError) as e:
@@ -145,23 +110,13 @@ class CatalogSpec:
 @dataclass
 class DataSpec:
     root: str = "data/raw"
-    #: Where the corpus arrives, before anything has converted it.
-    #: docs/adr/0010
+    #: Where the corpus arrives, before anything has converted it. docs/adr/0010
     source_root: str = "data/source"
-    #: Which conversion to run over it. Empty resolves by what the files
-    #: are and what this project ingests, and refuses an ambiguity.
+    #: Which conversion to run; empty resolves from the files and the type, refusing ambiguity.
     preparer: str = ""
-    #: A registered sample type: what these files are, which decides which
-    #: extensions are allowed, what is recorded about each one, and how
-    #: they group.
+    #: A registered sample type: what these files are. docs/adr/0010
     type: str = ""
-    #: What this job's model is told about a sample besides its bytes, each
-    #: naming its source, ``label_set`` or ``metadata`` (``docs/adr/0011``):
-    #:
-    #:     [[data.features]]
-    #:     name = "species"
-    #:     source = "label_set"
-    #:     ref = "plant-species"
+    #: What the model sees of a sample besides its bytes, each naming its source. docs/adr/0011
     features: list[dict] = field(default_factory=list)
 
 
@@ -173,8 +128,7 @@ class Project:
     model: ModelSpec = field(default_factory=ModelSpec)
     data: DataSpec = field(default_factory=DataSpec)
     catalog: CatalogSpec = field(default_factory=CatalogSpec)
-    #: Sections the job does not own, by name, as read; the job carries
-    #: them unread. docs/adr/0016
+    #: Sections the job does not own, carried unread. docs/adr/0016
     extensions: dict[str, dict] = field(default_factory=dict)
 
     SECTIONS = ("label_set", "model", "data", "catalog")
@@ -275,8 +229,6 @@ class Project:
     @property
     def feature_specs(self) -> list:
         """The declarations, validated. Empty for a project with none."""
-        from strata.catalog.versions.features import FeatureSpec
-
         return [FeatureSpec.from_dict(raw) for raw in self.data.features]
 
     @property
@@ -290,11 +242,9 @@ class Project:
 
     def sample_type(self):
         """The type itself, resolved from what is installed."""
-        from strata.contracts.sample_types import SampleTypeError, resolve
-
         name = self.sample_type_name
         try:
-            return resolve(name)()
+            return resolve_sample_type(name)()
         except SampleTypeError as e:
             raise ProjectError(f"[data] type: {e}") from None
 
@@ -311,12 +261,10 @@ class Project:
         return absolute(self.model.ref if ref is None else ref, self.root)
 
     def load_model(self) -> Model:
-        """Instantiate the project's model with its configured parameters.
+        """The project's model, instantiated with its parameters.
 
-        Resolution is ``strata.modelling``'s: a short name goes through the
-        registry, and anything with a ``:`` is a direct reference, either a
-        ``file.py:Class`` carried by the project or an installed
-        ``module:Class``. A missing ML framework surfaces here.
+        Resolution is ``strata.modelling``'s; a missing framework surfaces
+        here. See ``docs/adr/0034``.
         """
         try:
             model_cls = resolve(self.model.ref, root=self.root)
@@ -331,9 +279,8 @@ class Project:
     def add_classes(self, names: list[str], known: list[str] | None = None) -> list[str]:
         """Append classes to project.toml and return the new full list.
 
-        Classes are append-only (``docs/adr/0005``). When the list is empty
-        the classes in use are written
-        out first (``known``), turning an inferred order into a pinned one.
+        An empty list is seeded from ``known`` first, so the order is pinned.
+        See ``docs/adr/0005``.
         """
         classes = list(self.label_set.classes) or sorted(known or [])
         for name in names:
@@ -506,8 +453,7 @@ def _resolve_named(path: Path) -> Path:
     named = Path(PROJECTS_DIR) / path
     if (named / PROJECT_FILE).exists():
         return named.resolve()
-    # Absolute, so nothing handed on depends on cwd (docs/adr/0016); load()
-    # raises the missing-project.toml error from here
+    # Absolute, so nothing handed on depends on cwd; load() reports it missing. docs/adr/0016
     return path.resolve()
 
 
@@ -521,8 +467,7 @@ def _resolve_root(path: Path | None) -> Path:
     if (Path(".") / PROJECT_FILE).exists():
         return Path(".").resolve()
 
-    # Bare command inside a repo with a projects/ folder: unambiguous only
-    # when there is exactly one project
+    # A bare command in a repo with projects/ is unambiguous only with one project
     candidates = list_projects()
     if len(candidates) == 1:
         return candidates[0].resolve()
@@ -536,10 +481,8 @@ def _resolve_root(path: Path | None) -> Path:
 
 
 def _label_set(data: dict) -> dict:
-    """The [label_set] table, refusing the key it had before it was renamed.
+    """The ``[label_set]`` table, refusing the old ``task`` key by its new name.
 
-    Named rather than left to the unknown-key refusal, which would list the
-    known keys without saying ``task`` is one of them under a new name.
     See ``docs/adr/0041``.
     """
     if "task" in data:

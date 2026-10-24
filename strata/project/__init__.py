@@ -1,13 +1,8 @@
 """A project is the job: what it labels, from which catalog, with what model.
 
 The one file the labeller and an experiment both read, so it lives below
-both (``docs/adr/0016``). Everything here is about the job; how a tool
-presents it is that tool's own, kept in a section this package carries
-without reading.
-
-**May import:** ``contracts``, ``catalog`` and ``modelling``.
-**May not import:** ``strata.labeller``, ``strata.experiment``, or Label
-Studio.
+both; it imports contracts, catalog and modelling, never labeller,
+experiment or Label Studio. See ``docs/adr/0016``.
 """
 
 from .project import (
@@ -32,8 +27,7 @@ from .settings import (
     settings_path,
 )
 
-#: What another package may use is what is exported here; no module path
-#: is promised (``docs/adr/0015``).
+#: Nothing beyond these exports is promised by module path. docs/adr/0015
 PUBLIC_MODULES: frozenset[str] = frozenset()
 
 __all__ = [

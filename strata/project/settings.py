@@ -1,13 +1,8 @@
 """Machine-level settings: the catalogs this host reaches, and where it trains.
 
-Everything that belongs to a job lives in the project directory instead.
-This file describes the machine; a project carries none of it
-(``docs/adr/0016``).
-
-What a catalog is, and which one this host uses, is read through
-:mod:`strata.catalog.config`, which the blob server and the modelling host
-read too. A tool with settings of its own extends :class:`Settings` and
-reads its own section from the same file.
+A project carries none of this; a tool with settings of its own extends
+:class:`Settings` and reads its own section of the same file. Catalogs are
+read through :mod:`strata.catalog.config`. See ``docs/adr/0016``, ``docs/adr/0019``.
 """
 
 import os
@@ -17,9 +12,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-# Which file a command reads is settled in the catalog, so that every
-# command line, strata-catalog included, resolves it the same way. Both
-# names stay importable from here. docs/adr/0019
+# Resolved in the catalog, so every command reads the same file. docs/adr/0019
 from strata.catalog.config import (
     SETTINGS_FILE,  # noqa: F401
     CatalogConfigError,
@@ -35,11 +28,8 @@ class ModellingConfigError(CatalogConfigError):
 
 @dataclass
 class ModellingConfig:
-    """Where training happens.
-
-    Empty means in this process. A URL sends rounds to a host with the
-    GPU, which materialises the dataset itself. See ``docs/adr/0007``.
-    """
+    """Where training happens: in this process when ``url`` is empty, else on
+    that host. See ``docs/adr/0007``."""
 
     url: str = ""
     #: Shared with the host, and read from the environment. docs/adr/0019
@@ -61,8 +51,7 @@ class ModellingConfig:
 
 #: What ``[modelling]`` and each ``[modelling.<name>]`` may say.
 _MODELLING_KEYS = frozenset({"url", "token"})
-#: Only in a ``[modelling.<name>]``: the catalogs whose projects it trains
-#: when nothing names a host. docs/adr/0043
+#: In a ``[modelling.<name>]`` only: the catalogs it trains by default. docs/adr/0043
 _DEFAULT_FOR = "default_for"
 
 
@@ -70,9 +59,6 @@ _DEFAULT_FOR = "default_for"
 class ModellingHosts:
     """Every modelling host this machine describes, and which one it uses by default.
 
-    The same shape as the catalogs, for the same reason: a run and its
-    checkpoint live on the host that trained it, so asking another one for
-    "the latest run" answers about a different chain, and nothing raises.
     See ``docs/adr/0043``.
     """
 
@@ -80,11 +66,9 @@ class ModellingHosts:
     default: ModellingConfig = field(default_factory=ModellingConfig)
     #: From ``[modelling.<name>]`` tables. Empty with a flat ``[modelling]`` only.
     by_name: dict[str, ModellingConfig] = field(default_factory=dict)
-    #: Which name :attr:`default` resolved to. Empty for a flat ``[modelling]``,
-    #: or when several are described and none is marked — see :meth:`named`.
+    #: Which name :attr:`default` resolved to; empty for a flat table or none marked.
     default_name: str = ""
-    #: Catalog name to the host its projects train on when nothing names
-    #: one, from each table's ``default_for``.
+    #: Catalog name to the host its projects train on by default (``default_for``).
     by_catalog: dict[str, str] = field(default_factory=dict)
 
     def names(self) -> list[str]:
@@ -97,9 +81,8 @@ class ModellingHosts:
     def named(self, name: str = "") -> ModellingConfig:
         """One host by name, or the default when nothing is named.
 
-        A name that does not exist is refused with the list of the ones
-        that do, and several with no default is refused here rather than
-        guessed — training in this process instead would be a guess too.
+        Several hosts with none marked default is refused rather than
+        guessed. See ``docs/adr/0043``.
         """
         if not name:
             if not self.default_name and self.by_name:
@@ -120,19 +103,16 @@ class ModellingHosts:
 
 
 def _token_variable(name: str) -> str:
-    """The variable a named host's token comes from: ``gx10`` reads
-    ``$STRATA_MODELLING_TOKEN_GX10``."""
+    """The environment variable a named host's token is read from."""
     return "STRATA_MODELLING_TOKEN_" + re.sub(r"[^A-Za-z0-9]", "_", name).upper()
 
 
 def read_modelling(section: dict, environ: Mapping[str, str]) -> ModellingHosts:
-    """A flat ``[modelling]``, or ``[modelling.<name>]`` tables, or both.
+    """A flat ``[modelling]``, or ``[modelling.<name>]`` tables layered over it, or both.
 
-    Flat keys are shared by every named table, which layers on top of them,
-    as ``[catalog]`` does. Tokens come from the environment: a named host's
-    own variable first, then ``$STRATA_MODELLING_TOKEN`` for them all.
-    ``$STRATA_MODELLING_URL`` stands in for the flat url only, since with
-    several hosts it could not say which it replaces. See ``docs/adr/0019``.
+    Tokens come from the environment, a named host's own variable before
+    ``$STRATA_MODELLING_TOKEN``; ``$STRATA_MODELLING_URL`` replaces the flat
+    url only. See ``docs/adr/0019``.
     """
     scalars = {k: v for k, v in section.items() if not isinstance(v, dict)}
     tables = {k: v for k, v in section.items() if isinstance(v, dict)}
@@ -209,8 +189,7 @@ def read_modelling(section: dict, environ: Mapping[str, str]) -> ModellingHosts:
     if len(by_name) == 1:
         [(name, only)] = by_name.items()
         return ModellingHosts(default=only, by_name=by_name, default_name=name, by_catalog=claims)
-    # Unresolved, and not an error yet: a project, a catalog's default or
-    # --host naming one settles it
+    # Not an error yet: a project, a catalog's default or --host settles it. docs/adr/0043
     return ModellingHosts(by_name=by_name, by_catalog=claims)
 
 
@@ -247,11 +226,8 @@ class Settings:
     def modelling_for(self, catalog: str = "", host: str = "") -> ModellingConfig:
         """The host a project on ``catalog`` trains on.
 
-        ``host`` when given (``--host``, else the project's ``[model]
-        host``); otherwise the host whose ``default_for`` lists the catalog,
-        since only a host that reads a catalog can train from it; otherwise
-        the machine's default. An empty ``catalog`` is the machine's default
-        catalog. See ``docs/adr/0043``.
+        ``host`` when given; else the host whose ``default_for`` lists the
+        catalog; else the machine's default. See ``docs/adr/0043``.
         """
         if host:
             return self.modelling.named(host)
